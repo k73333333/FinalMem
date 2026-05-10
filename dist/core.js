@@ -8,6 +8,11 @@ let initialized = false;
 function generateId() {
     return `mem-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
+function logError(message, error) {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
+        console.error(`[MEMGUARD Error] ${message}`, error);
+    }
+}
 function initRegistry() {
     if (registry)
         return;
@@ -19,7 +24,8 @@ function initRegistry() {
                 trackedMap.delete(id);
             }
         }
-        catch {
+        catch (error) {
+            logError('FinalizationRegistry callback error', error);
         }
     });
 }
@@ -34,7 +40,9 @@ function startInspection() {
             for (const [id, info] of trackedMap) {
                 if (info.isLeaked)
                     continue;
-                if (info.destroyTime !== null && now - info.destroyTime > threshold) {
+                const checkTime = info.destroyTime || info.createTime;
+                const elapsed = now - checkTime;
+                if (elapsed > threshold) {
                     const obj = info.weakRef.deref();
                     if (obj !== undefined) {
                         info.isLeaked = true;
@@ -47,7 +55,8 @@ function startInspection() {
                 }
             }
         }
-        catch {
+        catch (error) {
+            logError('Inspection interval error', error);
         }
     }, interval);
 }
@@ -81,7 +90,8 @@ export function track(obj, options = {}) {
         startInspection();
         return id;
     }
-    catch {
+    catch (error) {
+        logError('track function error', error);
         return '';
     }
 }
@@ -94,18 +104,23 @@ export function destroy(id) {
             info.destroyTime = Date.now();
         }
     }
-    catch {
+    catch (error) {
+        logError('destroy function error', error);
     }
 }
 export function untrack(id) {
     try {
         const info = trackedMap.get(id);
-        if (info && registry) {
-            registry.unregister(info.registryToken);
+        if (info) {
+            const currentRegistry = registry;
+            if (currentRegistry) {
+                currentRegistry.unregister(info.registryToken);
+            }
+            trackedMap.delete(id);
         }
-        trackedMap.delete(id);
     }
-    catch {
+    catch (error) {
+        logError('untrack function error', error);
     }
 }
 export function getTrackedCount() {
@@ -126,18 +141,19 @@ export function clearAll() {
         registry = null;
         initialized = false;
     }
-    catch {
+    catch (error) {
+        logError('clearAll function error', error);
     }
 }
 export function init(options) {
     if (initialized)
         return;
+    initialized = true;
     if (options) {
         setConfig(options);
     }
     initRegistry();
     startInspection();
-    initialized = true;
 }
 export function isInitialized() {
     return initialized;

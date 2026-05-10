@@ -1,5 +1,3 @@
-import React, { createContext, useRef, useEffect, createElement, useLayoutEffect, useContext } from 'react';
-
 const CHROME_REGEX = /at\s+(.+?)\s+\((.+?):(\d+):(\d+)\)/;
 const CHROME_SHORT_REGEX = /at\s+(.+?):(\d+):(\d+)/;
 const FIREFOX_REGEX = /(.+?)@(.+?):(\d+):(\d+)/;
@@ -11,6 +9,8 @@ function parseStack(stack) {
     let file = '';
     let lineNum = 0;
     let column = 0;
+    let methodName = '';
+    let closureName = '';
     for (let i = 1; i < lines.length; i++) {
         const lineText = lines[i];
         let match = null;
@@ -39,7 +39,20 @@ function parseStack(stack) {
                 matchedType = 'safari_short';
         }
         if (match && matchedType) {
-            if (!file) {
+            let currentFile = '';
+            const functionName = match[1];
+            switch (matchedType) {
+                case 'chrome':
+                case 'firefox':
+                case 'safari':
+                    currentFile = match[2];
+                    break;
+                case 'chrome_short':
+                case 'safari_short':
+                    currentFile = match[1];
+                    break;
+            }
+            if (!file && !currentFile.includes('index.umd.js') && !currentFile.includes('dist/')) {
                 switch (matchedType) {
                     case 'chrome':
                     case 'firefox':
@@ -56,13 +69,20 @@ function parseStack(stack) {
                         break;
                 }
             }
-            callStack.push(match[1] || lineText);
+            if (!methodName && functionName && !currentFile.includes('index.umd.js') && !currentFile.includes('dist/')) {
+                const cleanName = functionName.replace(/^Object\./, '').replace(/^Function\./, '');
+                methodName = cleanName;
+            }
+            if (!closureName && functionName && (functionName.includes('(anonymous)') || functionName.includes('Closure'))) {
+                closureName = functionName;
+            }
+            callStack.push(functionName || lineText);
         }
         else {
             callStack.push(lineText);
         }
     }
-    return { file, line: lineNum, column, callStack };
+    return { file, line: lineNum, column, callStack, methodName, closureName };
 }
 
 function getIsProduction() {
@@ -106,7 +126,23 @@ function getConfig() {
     return config;
 }
 function setConfig(newConfig) {
-    config = { ...config, ...newConfig };
+    const validatedConfig = {};
+    if (newConfig.enabled !== undefined) {
+        validatedConfig.enabled = Boolean(newConfig.enabled);
+    }
+    if (newConfig.threshold !== undefined && typeof newConfig.threshold === 'number' && newConfig.threshold >= 0) {
+        validatedConfig.threshold = newConfig.threshold;
+    }
+    if (newConfig.interval !== undefined && typeof newConfig.interval === 'number' && newConfig.interval > 0) {
+        validatedConfig.interval = newConfig.interval;
+    }
+    if (newConfig.ignorePatterns !== undefined && Array.isArray(newConfig.ignorePatterns)) {
+        validatedConfig.ignorePatterns = newConfig.ignorePatterns.filter(p => p instanceof RegExp);
+    }
+    if (newConfig.globalVariableName !== undefined && typeof newConfig.globalVariableName === 'string') {
+        validatedConfig.globalVariableName = newConfig.globalVariableName;
+    }
+    config = { ...config, ...validatedConfig };
 }
 function isEnabled() {
     return config.enabled;
@@ -118,16 +154,37 @@ function shouldIgnore(file) {
 function logLeak(info) {
     const now = Date.now();
     const aliveTime = info.destroyTime ? now - info.destroyTime : now - info.createTime;
-    console.warn(`%c[MEMGUARD 内存泄漏]`, 'color: #ff4757; font-weight: bold;', `类型: ${info.type} | 名称: ${info.name} | 存活: ${aliveTime}ms`);
+    console.warn(`%c[MEMGUARD] %c疑似内存泄漏检测`, 'color: #667eea; font-weight: bold;', 'color: #ff4757; font-weight: bold; font-size: 14px;');
+    console.warn(`  %c类型%c: ${info.type} | %c名称%c: ${info.name} | %c存活%c: ${aliveTime}ms`);
     if (info.stack.file) {
-        console.warn(`文件: ${info.stack.file} | 行: ${info.stack.line}`);
+        console.warn(`%c📍 定位信息`, 'color: #2ed573; font-weight: bold;');
+        console.warn(`  ├── %c文件%c : ${truncate(info.stack.file, 60)}`);
+        console.warn(`  └── %c行号%c : ${info.stack.line}`);
+    }
+    if (info.stack.methodName) {
+        console.warn(`%c🔧 调用方法`, 'color: #ffa502; font-weight: bold;');
+        console.warn(`  └── %c名称%c : ${info.stack.methodName}`);
+    }
+    if (info.stack.closureName) {
+        console.warn(`%c🔒 闭包信息`, 'color: #9b59b6; font-weight: bold;');
+        console.warn(`  └── %c名称%c : ${info.stack.closureName}`);
     }
     if (info.stack.callStack.length > 0) {
-        console.warn('完整堆栈:');
-        info.stack.callStack.forEach((line, index) => {
-            console.warn(`  ${index + 1}. ${line}`);
+        console.warn(`%c📋 调用堆栈`, 'color: #3498db; font-weight: bold;');
+        const stackLines = info.stack.callStack.slice(0, 5);
+        stackLines.forEach((line, index) => {
+            const cleanLine = line.replace(/\s+/g, ' ').trim();
+            console.warn(`  ├── ${index + 1}. ${truncate(cleanLine, 55)}`);
         });
+        if (info.stack.callStack.length > 5) {
+            console.warn(`  └── ... 共 ${info.stack.callStack.length} 行`);
+        }
     }
+}
+function truncate(str, maxLength) {
+    if (str.length <= maxLength)
+        return str;
+    return str.slice(0, maxLength - 3) + '...';
 }
 
 const trackedMap = new Map();
@@ -136,6 +193,11 @@ let inspectionTimer = null;
 let initialized = false;
 function generateId() {
     return `mem-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+function logError(message, error) {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
+        console.error(`[MEMGUARD Error] ${message}`, error);
+    }
 }
 function initRegistry() {
     if (registry)
@@ -148,7 +210,8 @@ function initRegistry() {
                 trackedMap.delete(id);
             }
         }
-        catch {
+        catch (error) {
+            logError('FinalizationRegistry callback error', error);
         }
     });
 }
@@ -163,7 +226,9 @@ function startInspection() {
             for (const [id, info] of trackedMap) {
                 if (info.isLeaked)
                     continue;
-                if (info.destroyTime !== null && now - info.destroyTime > threshold) {
+                const checkTime = info.destroyTime || info.createTime;
+                const elapsed = now - checkTime;
+                if (elapsed > threshold) {
                     const obj = info.weakRef.deref();
                     if (obj !== undefined) {
                         info.isLeaked = true;
@@ -176,7 +241,8 @@ function startInspection() {
                 }
             }
         }
-        catch {
+        catch (error) {
+            logError('Inspection interval error', error);
         }
     }, interval);
 }
@@ -210,7 +276,8 @@ function track(obj, options = {}) {
         startInspection();
         return id;
     }
-    catch {
+    catch (error) {
+        logError('track function error', error);
         return '';
     }
 }
@@ -223,18 +290,23 @@ function destroy(id) {
             info.destroyTime = Date.now();
         }
     }
-    catch {
+    catch (error) {
+        logError('destroy function error', error);
     }
 }
 function untrack(id) {
     try {
         const info = trackedMap.get(id);
-        if (info && registry) {
-            registry.unregister(info.registryToken);
+        if (info) {
+            const currentRegistry = registry;
+            if (currentRegistry) {
+                currentRegistry.unregister(info.registryToken);
+            }
+            trackedMap.delete(id);
         }
-        trackedMap.delete(id);
     }
-    catch {
+    catch (error) {
+        logError('untrack function error', error);
     }
 }
 function getTrackedCount() {
@@ -255,18 +327,19 @@ function clearAll() {
         registry = null;
         initialized = false;
     }
-    catch {
+    catch (error) {
+        logError('clearAll function error', error);
     }
 }
 function init(options) {
     if (initialized)
         return;
+    initialized = true;
     if (options) {
         setConfig(options);
     }
     initRegistry();
     startInspection();
-    initialized = true;
 }
 function isInitialized() {
     return initialized;
@@ -335,7 +408,7 @@ const MemGuardVuePlugin = {
         init(options);
         if (options?.trackComponents !== false) {
             app.mixin({
-                beforeCreate() {
+                created() {
                     const opts = this.$options;
                     const componentName = opts.name || opts._componentTag || 'Anonymous';
                     const id = track(this, {
@@ -356,7 +429,19 @@ const MemGuardVuePlugin = {
     }
 };
 
-function useMemGuard(obj, options) {
+let React = null;
+try {
+    React = require('react');
+}
+catch {
+    React = null;
+}
+const canUseReact = React !== null;
+const useMemGuard = (obj, options) => {
+    if (!canUseReact) {
+        return obj;
+    }
+    const { useEffect, useRef } = React;
     const idRef = useRef(null);
     useEffect(() => {
         const id = track(obj, options);
@@ -366,11 +451,15 @@ function useMemGuard(obj, options) {
                 destroy(idRef.current);
             }
         };
-    }, [obj]);
+    }, [obj, options?.type, options?.name]);
     return obj;
-}
-function withMemGuard(Component, options) {
-    return function MemGuardWrapped(props) {
+};
+const withMemGuard = (Component, options) => {
+    if (!canUseReact) {
+        return Component;
+    }
+    const { useEffect, useRef, createElement } = React;
+    return (props) => {
         const innerRef = useRef(null);
         const idRef = useRef(null);
         useEffect(() => {
@@ -389,9 +478,19 @@ function withMemGuard(Component, options) {
         }, []);
         return createElement(Component, { ...props, ref: innerRef });
     };
-}
-const MemGuardContext = createContext(null);
-function TrackedComponent({ element, key }) {
+};
+let MemGuardContext = null;
+const getMemGuardContext = () => {
+    if (!MemGuardContext && canUseReact) {
+        MemGuardContext = React.createContext(null);
+    }
+    return MemGuardContext;
+};
+const TrackedComponent = ({ element, key }) => {
+    if (!canUseReact) {
+        return element;
+    }
+    const { useEffect, useRef, createElement } = React;
     const innerRef = useRef(null);
     const idRef = useRef(null);
     const type = element.type;
@@ -416,11 +515,15 @@ function TrackedComponent({ element, key }) {
         ref: innerRef,
         key
     });
-}
-function recursivelyTrackChildren(children) {
+};
+const recursivelyTrackChildren = (children) => {
+    if (!canUseReact) {
+        return children;
+    }
+    const { isValidElement, createElement } = React;
     if (Array.isArray(children)) {
         return children.map((child, index) => {
-            if (React.isValidElement(child)) {
+            if (isValidElement(child)) {
                 return createElement(TrackedComponent, {
                     element: child,
                     key: child.key ?? `memguard-${index}`
@@ -429,16 +532,23 @@ function recursivelyTrackChildren(children) {
             return child;
         });
     }
-    if (React.isValidElement(children)) {
+    if (isValidElement(children)) {
         return createElement(TrackedComponent, {
             element: children,
             key: children.key
         });
     }
     return children;
-}
-function MemGuardProvider({ children, trackComponents = false, ...config }) {
-    useLayoutEffect(() => {
+};
+const MemGuardProvider = ({ children, trackComponents = false, ...config }) => {
+    if (!canUseReact) {
+        init(config);
+        return children;
+    }
+    const { useLayoutEffect, useEffect, createElement } = React;
+    const canUseDOM = typeof window !== 'undefined';
+    const useIsomorphicLayoutEffect = canUseDOM ? useLayoutEffect : useEffect;
+    useIsomorphicLayoutEffect(() => {
         init(config);
     }, []);
     const contextValue = {
@@ -449,15 +559,27 @@ function MemGuardProvider({ children, trackComponents = false, ...config }) {
     const content = trackComponents
         ? recursivelyTrackChildren(children)
         : children;
-    return createElement(MemGuardContext.Provider, { value: contextValue }, content);
-}
-function useMemGuardContext() {
-    const context = useContext(MemGuardContext);
+    const context = getMemGuardContext();
+    if (!context) {
+        return content;
+    }
+    return createElement(context.Provider, { value: contextValue }, content);
+};
+const useMemGuardContext = () => {
+    if (!canUseReact) {
+        throw new Error('useMemGuardContext requires React to be available');
+    }
+    const { useContext } = React;
+    const context = getMemGuardContext();
     if (!context) {
         throw new Error('useMemGuardContext must be used within a MemGuardProvider');
     }
-    return context;
-}
+    const ctx = useContext(context);
+    if (!ctx) {
+        throw new Error('useMemGuardContext must be used within a MemGuardProvider');
+    }
+    return ctx;
+};
 
 export { MemGuardProvider, MemGuardVuePlugin, clearAll, createMemGuardDirective, destroy, getConfig, getTrackedCount, init, install, isEnabled, isInitialized, memGuard, parseStack, setConfig, track, untrack, useMemGuardContext, useMemGuard as useReactMemGuard, useMemGuard$1 as useVueMemGuard, withMemGuard };
 //# sourceMappingURL=index.esm.js.map

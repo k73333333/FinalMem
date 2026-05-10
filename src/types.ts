@@ -1,8 +1,16 @@
+/*
+ * @Author: fukaidong
+ * @Description: -
+ * @Date: 2026-05-10
+ * @LastEditTime: 2026-05-10
+ */
 export interface ParsedStack {
   file: string
   line: number
   column: number
   callStack: string[]
+  methodName: string
+  closureName: string
 }
 
 export interface TrackedInfo {

@@ -167,6 +167,151 @@
       color: #666;
       margin-top: 5px;
     }
+    .config-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .config-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 10px;
+    }
+    .config-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 500;
+      color: #333;
+    }
+    .config-icon {
+      font-size: 1.2rem;
+    }
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 50px;
+      height: 28px;
+      cursor: pointer;
+    }
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .toggle-slider {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: 0.3s;
+      border-radius: 28px;
+    }
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: 0.3s;
+      border-radius: 50%;
+    }
+    .toggle-switch input:checked + .toggle-slider {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .toggle-switch input:checked + .toggle-slider:before {
+      transform: translateX(22px);
+    }
+    .input-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 200px;
+    }
+    .input-group input[type="range"] {
+      flex: 1;
+      height: 6px;
+      border-radius: 3px;
+      background: #ddd;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    .input-group input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .input-group input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.1);
+    }
+    .input-group input[type="number"] {
+      width: 80px;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      text-align: center;
+      outline: none;
+    }
+    .input-group input[type="number"]:focus {
+      border-color: #667eea;
+      box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+    }
+    .config-hint {
+      margin-top: 20px;
+      padding: 15px;
+      background: #e7f3ff;
+      border-radius: 8px;
+      border-left: 4px solid #667eea;
+      font-size: 0.9rem;
+      color: #333;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #eee;
+    }
+    .tab-btn {
+      padding: 10px 20px;
+      border: none;
+      background: transparent;
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: #666;
+      cursor: pointer;
+      border-radius: 8px 8px 0 0;
+      transition: all 0.3s;
+      position: relative;
+      bottom: -2px;
+    }
+    .tab-btn:hover {
+      color: #667eea;
+      background: #f8f9fa;
+    }
+    .tab-btn.active {
+      color: #667eea;
+      background: white;
+      border-bottom: 3px solid #667eea;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -237,45 +382,156 @@
 
     <div class="card">
       <h2 class="card-title">🔧 配置演示</h2>
-      <label>
-        启用检测:
-        <input type="checkbox" id="enabledCheckbox" checked onchange="toggleEnabled()">
-      </label>
-      <br>
-      <label>
-        阈值 (ms):
-        <input type="number" id="thresholdInput" value="5000" min="1000" max="30000" onchange="updateThreshold()">
-      </label>
-      <br>
-      <label>
-        检测间隔 (ms):
-        <input type="number" id="intervalInput" value="2000" min="500" max="10000" onchange="updateInterval()">
-      </label>
+      <div class="config-grid">
+        <div class="config-item">
+          <label class="config-label">
+            <span class="config-icon">⚡</span>
+            <span>启用检测</span>
+          </label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="enabledCheckbox" checked onchange="toggleEnabled()">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        
+        <div class="config-item">
+          <label class="config-label">
+            <span class="config-icon">⏱️</span>
+            <span>阈值 (ms)</span>
+          </label>
+          <div class="input-group">
+            <input type="range" id="thresholdRange" value="5000" min="1000" max="30000" step="1000" oninput="updateThresholdFromRange()">
+            <input type="number" id="thresholdInput" value="5000" min="1000" max="30000" onchange="updateThreshold()">
+          </div>
+        </div>
+        
+        <div class="config-item">
+          <label class="config-label">
+            <span class="config-icon">🔄</span>
+            <span>检测间隔 (ms)</span>
+          </label>
+          <div class="input-group">
+            <input type="range" id="intervalRange" value="2000" min="500" max="10000" step="500" oninput="updateIntervalFromRange()">
+            <input type="number" id="intervalInput" value="2000" min="500" max="10000" onchange="updateInterval()">
+          </div>
+        </div>
+      </div>
+      <div class="config-hint">
+        <p><strong>💡 提示：</strong>阈值表示对象标记销毁后多少毫秒仍未被回收视为泄漏；检测间隔表示每隔多少毫秒检查一次。</p>
+      </div>
     </div>
 
     <div class="card">
       <h2 class="card-title">💡 使用示例</h2>
-      <p>在实际项目中使用 FinalMem：</p>
-      <div class="code-block">
-// 初始化配置
+      
+      <div class="tabs">
+        <button class="tab-btn active" onclick="showTab('basic')">基础用法</button>
+        <button class="tab-btn" onclick="showTab('react')">React 集成</button>
+        <button class="tab-btn" onclick="showTab('vue')">Vue 集成</button>
+      </div>
+      
+      <div class="tab-content active" id="basic-tab">
+        <p style="margin-bottom: 15px;">在原生 JavaScript 项目中使用：</p>
+        <div class="code-block">
+// 方式一：自动初始化
 FinalMem.init({
   enabled: true,
   threshold: 5000,  // 超过5秒未回收视为泄漏
   interval: 2000    // 每2秒检测一次
 });
 
+// 方式二：简单配置
+FinalMem.configure({
+  threshold: 3000
+});
+
 // 追踪对象
 const obj = { data: 'test' };
 const id = FinalMem.track(obj, { type: 'object', name: 'myObject' });
 
-// 标记对象应该被销毁
+// 标记对象应该被销毁（对象生命周期结束时调用）
 FinalMem.destroy(id);
 
-// 或者直接取消追踪
+// 或者直接取消追踪（立即停止追踪）
 FinalMem.untrack(id);
 
 // 清除所有追踪
 FinalMem.clearAll();
+        </div>
+      </div>
+      
+      <div class="tab-content" id="react-tab">
+        <p style="margin-bottom: 15px;">在 React 项目中使用：</p>
+        <div class="code-block">
+import { useReactMemGuard, MemGuardProvider } from 'final-mem';
+
+// 方式一：使用 Hook 追踪对象
+function MyComponent() {
+  const [data, setData] = useState({ items: [] });
+  
+  // 追踪敏感对象
+  useReactMemGuard(data, { type: 'state', name: 'componentData' });
+  
+  return <div>...</div>;
+}
+
+// 方式二：使用高阶组件
+const TrackedComponent = withMemGuard(MyComponent, { 
+  type: 'component', 
+  name: 'TrackedComponent' 
+});
+
+// 方式三：全局 Provider（推荐）
+function App() {
+  return (
+    <MemGuardProvider 
+      enabled={true}
+      threshold={5000}
+      trackComponents={true}
+    >
+      <MyComponent />
+    </MemGuardProvider>
+  );
+}
+        </div>
+      </div>
+      
+      <div class="tab-content" id="vue-tab">
+        <p style="margin-bottom: 15px;">在 Vue 项目中使用：</p>
+        <div class="code-block">
+import { MemGuardVuePlugin, useVueMemGuard } from 'final-mem';
+
+// 方式一：安装插件（推荐）
+const app = createApp(App);
+app.use(MemGuardVuePlugin, {
+  enabled: true,
+  threshold: 5000,
+  trackComponents: true  // 自动追踪所有组件
+});
+
+// 方式二：在组件中使用
+export default {
+  setup() {
+    const { track, destroy } = useVueMemGuard();
+    const data = reactive({ items: [] });
+    
+    const id = track(data, { type: 'state', name: 'componentData' });
+    
+    onUnmounted(() => {
+      destroy(id);
+    });
+    
+    return { data };
+  }
+};
+
+// 方式三：使用指令
+<template>
+  <div v-mem-guard="{ type: 'element', name: 'myDiv' }">
+    Content
+  </div>
+</template>
+        </div>
       </div>
     </div>
 
@@ -288,23 +544,18 @@ FinalMem.clearAll();
   <script src="dist/index.umd.js"></script>
   <script>
     let trackedObjects = [];
-    
     let globalLeakObj = null;
     let globalLeakId = null;
-    
     let listenerLeakObj = null;
     let listenerLeakId = null;
     let listenerLeakElement = null;
     let listenerHandler = null;
-    
     let timerLeakObj = null;
     let timerLeakId = null;
     let timerId = null;
-    
     let closureLeakObj = null;
     let closureLeakId = null;
     let closureCallback = null;
-    
     let cacheLeakObj = null;
     let cacheLeakId = null;
     let leakyCache = null;
@@ -527,9 +778,15 @@ FinalMem.clearAll();
     function updateLeakStatus(type, message) {
       const status = document.getElementById('leakStatus');
       const indicator = document.getElementById('leakIndicator');
+      
+      if (!status || !indicator) {
+        alert('错误：找不到状态显示元素，请刷新页面重试');
+        return;
+      }
+      
       status.className = `status ${type}`;
       indicator.className = `leak-indicator ${type === 'info' ? '' : type}`;
-      status.innerHTML = `<span class="leak-indicator ${type === 'info' ? '' : type}"></span>${message}`;
+      status.innerHTML = `<span id="leakIndicator" class="leak-indicator ${type === 'info' ? '' : type}"></span>${message}`;
       updateStats();
     }
 
@@ -547,20 +804,48 @@ FinalMem.clearAll();
 
     function updateInterval() {
       const interval = parseInt(document.getElementById('intervalInput').value);
+      document.getElementById('intervalRange').value = interval;
       FinalMem.configure({ interval });
       console.log('检测间隔更新:', interval + 'ms');
     }
 
-    FinalMem.init({
-      enabled: true,
-      threshold: 5000,
-      interval: 2000
+    function updateThresholdFromRange() {
+      const threshold = parseInt(document.getElementById('thresholdRange').value);
+      document.getElementById('thresholdInput').value = threshold;
+      FinalMem.configure({ threshold });
+      console.log('阈值更新:', threshold + 'ms');
+    }
+
+    function updateIntervalFromRange() {
+      const interval = parseInt(document.getElementById('intervalRange').value);
+      document.getElementById('intervalInput').value = interval;
+      FinalMem.configure({ interval });
+      console.log('检测间隔更新:', interval + 'ms');
+    }
+
+    function showTab(tabName) {
+      const tabs = document.querySelectorAll('.tab-btn');
+      const contents = document.querySelectorAll('.tab-content');
+      
+      tabs.forEach(tab => tab.classList.remove('active'));
+      contents.forEach(content => content.classList.remove('active'));
+      
+      document.querySelector(`.tab-btn[onclick="showTab('${tabName}')"]`).classList.add('active');
+      document.getElementById(`${tabName}-tab`).classList.add('active');
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      FinalMem.init({
+        enabled: true,
+        threshold: 5000,
+        interval: 2000
+      });
+
+      setInterval(updateStats, 1000);
+
+      console.log('🎉 FinalMem 演示页面已加载');
+      console.log('📖 打开开发者工具查看内存泄漏检测日志');
     });
-
-    setInterval(updateStats, 1000);
-
-    console.log('🎉 FinalMem 演示页面已加载');
-    console.log('📖 打开开发者工具查看内存泄漏检测日志');
   </script>
 </body>
 </html>

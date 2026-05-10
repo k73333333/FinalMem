@@ -39,7 +39,23 @@ export function getConfig() {
     return config;
 }
 export function setConfig(newConfig) {
-    config = { ...config, ...newConfig };
+    const validatedConfig = {};
+    if (newConfig.enabled !== undefined) {
+        validatedConfig.enabled = Boolean(newConfig.enabled);
+    }
+    if (newConfig.threshold !== undefined && typeof newConfig.threshold === 'number' && newConfig.threshold >= 0) {
+        validatedConfig.threshold = newConfig.threshold;
+    }
+    if (newConfig.interval !== undefined && typeof newConfig.interval === 'number' && newConfig.interval > 0) {
+        validatedConfig.interval = newConfig.interval;
+    }
+    if (newConfig.ignorePatterns !== undefined && Array.isArray(newConfig.ignorePatterns)) {
+        validatedConfig.ignorePatterns = newConfig.ignorePatterns.filter(p => p instanceof RegExp);
+    }
+    if (newConfig.globalVariableName !== undefined && typeof newConfig.globalVariableName === 'string') {
+        validatedConfig.globalVariableName = newConfig.globalVariableName;
+    }
+    config = { ...config, ...validatedConfig };
 }
 export function isEnabled() {
     return config.enabled;

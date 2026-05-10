@@ -1,6 +1,17 @@
-import React, { useEffect, useLayoutEffect, useRef, createContext, useContext, createElement } from 'react';
 import { track, destroy, init } from '../core';
-export function useMemGuard(obj, options) {
+let React = null;
+try {
+    React = require('react');
+}
+catch {
+    React = null;
+}
+const canUseReact = React !== null;
+export const useMemGuard = (obj, options) => {
+    if (!canUseReact) {
+        return obj;
+    }
+    const { useEffect, useRef } = React;
     const idRef = useRef(null);
     useEffect(() => {
         const id = track(obj, options);
@@ -10,11 +21,15 @@ export function useMemGuard(obj, options) {
                 destroy(idRef.current);
             }
         };
-    }, [obj]);
+    }, [obj, options?.type, options?.name]);
     return obj;
-}
-export function withMemGuard(Component, options) {
-    return function MemGuardWrapped(props) {
+};
+export const withMemGuard = (Component, options) => {
+    if (!canUseReact) {
+        return Component;
+    }
+    const { useEffect, useRef, createElement } = React;
+    return (props) => {
         const innerRef = useRef(null);
         const idRef = useRef(null);
         useEffect(() => {
@@ -33,9 +48,19 @@ export function withMemGuard(Component, options) {
         }, []);
         return createElement(Component, { ...props, ref: innerRef });
     };
-}
-const MemGuardContext = createContext(null);
-function TrackedComponent({ element, key }) {
+};
+let MemGuardContext = null;
+const getMemGuardContext = () => {
+    if (!MemGuardContext && canUseReact) {
+        MemGuardContext = React.createContext(null);
+    }
+    return MemGuardContext;
+};
+const TrackedComponent = ({ element, key }) => {
+    if (!canUseReact) {
+        return element;
+    }
+    const { useEffect, useRef, createElement } = React;
     const innerRef = useRef(null);
     const idRef = useRef(null);
     const type = element.type;
@@ -60,11 +85,15 @@ function TrackedComponent({ element, key }) {
         ref: innerRef,
         key
     });
-}
-function recursivelyTrackChildren(children) {
+};
+const recursivelyTrackChildren = (children) => {
+    if (!canUseReact) {
+        return children;
+    }
+    const { isValidElement, createElement } = React;
     if (Array.isArray(children)) {
         return children.map((child, index) => {
-            if (React.isValidElement(child)) {
+            if (isValidElement(child)) {
                 return createElement(TrackedComponent, {
                     element: child,
                     key: child.key ?? `memguard-${index}`
@@ -73,16 +102,23 @@ function recursivelyTrackChildren(children) {
             return child;
         });
     }
-    if (React.isValidElement(children)) {
+    if (isValidElement(children)) {
         return createElement(TrackedComponent, {
             element: children,
             key: children.key
         });
     }
     return children;
-}
-export function MemGuardProvider({ children, trackComponents = false, ...config }) {
-    useLayoutEffect(() => {
+};
+export const MemGuardProvider = ({ children, trackComponents = false, ...config }) => {
+    if (!canUseReact) {
+        init(config);
+        return children;
+    }
+    const { useLayoutEffect, useEffect, createElement } = React;
+    const canUseDOM = typeof window !== 'undefined';
+    const useIsomorphicLayoutEffect = canUseDOM ? useLayoutEffect : useEffect;
+    useIsomorphicLayoutEffect(() => {
         init(config);
     }, []);
     const contextValue = {
@@ -93,13 +129,25 @@ export function MemGuardProvider({ children, trackComponents = false, ...config 
     const content = trackComponents
         ? recursivelyTrackChildren(children)
         : children;
-    return createElement(MemGuardContext.Provider, { value: contextValue }, content);
-}
-export function useMemGuardContext() {
-    const context = useContext(MemGuardContext);
+    const context = getMemGuardContext();
+    if (!context) {
+        return content;
+    }
+    return createElement(context.Provider, { value: contextValue }, content);
+};
+export const useMemGuardContext = () => {
+    if (!canUseReact) {
+        throw new Error('useMemGuardContext requires React to be available');
+    }
+    const { useContext } = React;
+    const context = getMemGuardContext();
     if (!context) {
         throw new Error('useMemGuardContext must be used within a MemGuardProvider');
     }
-    return context;
-}
+    const ctx = useContext(context);
+    if (!ctx) {
+        throw new Error('useMemGuardContext must be used within a MemGuardProvider');
+    }
+    return ctx;
+};
 //# sourceMappingURL=react.js.map

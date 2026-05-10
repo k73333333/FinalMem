@@ -26,7 +26,7 @@ export const MemGuardVuePlugin = {
         init(options);
         if (options?.trackComponents !== false) {
             app.mixin({
-                beforeCreate() {
+                created() {
                     const opts = this.$options;
                     const componentName = opts.name || opts._componentTag || 'Anonymous';
                     const id = track(this, {

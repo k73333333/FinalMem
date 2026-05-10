@@ -3,6 +3,8 @@ export interface ParsedStack {
     line: number;
     column: number;
     callStack: string[];
+    methodName: string;
+    closureName: string;
 }
 export interface TrackedInfo {
     id: string;

@@ -1,14 +1,13 @@
-import React, { type ComponentType, type Ref, type ReactNode } from 'react';
 interface UseMemGuardOptions {
     type?: string;
     name?: string;
 }
-export declare function useMemGuard<T extends object>(obj: T, options?: UseMemGuardOptions): T;
-export declare function withMemGuard<P extends object>(Component: ComponentType<P>, options?: UseMemGuardOptions): (props: P & {
-    ref?: Ref<any>;
-}) => React.ReactElement<P, string | React.JSXElementConstructor<any>>;
+export declare const useMemGuard: <T extends object>(obj: T, options?: UseMemGuardOptions) => T;
+export declare const withMemGuard: <P extends object>(Component: React.ComponentType<P>, options?: UseMemGuardOptions) => import("react").ComponentType<P> | ((props: P & {
+    ref?: React.Ref<any>;
+}) => import("react").ReactElement<P, string | import("react").JSXElementConstructor<any>>);
 interface MemGuardProviderProps {
-    children: ReactNode;
+    children: React.ReactNode;
     enabled?: boolean;
     threshold?: number;
     interval?: number;
@@ -20,6 +19,7 @@ interface MemGuardContextType {
     destroy: (id: string) => void;
     trackComponents: boolean;
 }
-export declare function MemGuardProvider({ children, trackComponents, ...config }: MemGuardProviderProps): React.FunctionComponentElement<React.ProviderProps<MemGuardContextType | null>>;
-export declare function useMemGuardContext(): MemGuardContextType;
+type MemGuardContextTypeValue = MemGuardContextType | null;
+export declare const MemGuardProvider: ({ children, trackComponents, ...config }: MemGuardProviderProps) => string | number | bigint | boolean | import("react").ReactElement<unknown, string | import("react").JSXElementConstructor<any>> | Iterable<import("react").ReactNode> | Promise<string | number | bigint | boolean | import("react").ReactPortal | import("react").ReactElement<unknown, string | import("react").JSXElementConstructor<any>> | Iterable<import("react").ReactNode> | null | undefined> | import("react").FunctionComponentElement<import("react").ProviderProps<MemGuardContextTypeValue>> | null | undefined;
+export declare const useMemGuardContext: () => MemGuardContextType;
 export {};

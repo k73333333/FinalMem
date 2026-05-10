@@ -1,4 +1,3 @@
-import React, { useEffect, useLayoutEffect, useRef, type ComponentType, type Ref, createContext, useContext, type ReactNode, createElement, type ReactElement, type Key } from 'react';
 import { track, destroy, init } from '../core';
 
 interface UseMemGuardOptions {
@@ -6,7 +5,22 @@ interface UseMemGuardOptions {
   name?: string;
 }
 
-export function useMemGuard<T extends object>(obj: T, options?: UseMemGuardOptions): T {
+let React: typeof import('react') | null = null;
+
+try {
+  React = require('react');
+} catch {
+  React = null;
+}
+
+const canUseReact = React !== null;
+
+export const useMemGuard = <T extends object>(obj: T, options?: UseMemGuardOptions): T => {
+  if (!canUseReact) {
+    return obj;
+  }
+  
+  const { useEffect, useRef } = React!;
   const idRef = useRef<string | null>(null);
   
   useEffect(() => {
@@ -21,10 +35,16 @@ export function useMemGuard<T extends object>(obj: T, options?: UseMemGuardOptio
   }, [obj, options?.type, options?.name]);
   
   return obj;
-}
+};
 
-export function withMemGuard<P extends object>(Component: ComponentType<P>, options?: UseMemGuardOptions) {
-  return function MemGuardWrapped(props: P & { ref?: Ref<any> }) {
+export const withMemGuard = <P extends object>(Component: React.ComponentType<P>, options?: UseMemGuardOptions) => {
+  if (!canUseReact) {
+    return Component;
+  }
+  
+  const { useEffect, useRef, createElement } = React!;
+  
+  return (props: P & { ref?: React.Ref<any> }) => {
     const innerRef = useRef<any>(null);
     const idRef = useRef<string | null>(null);
     
@@ -32,7 +52,7 @@ export function withMemGuard<P extends object>(Component: ComponentType<P>, opti
       if (innerRef.current) {
         const id = track(innerRef.current as object, {
           type: options?.type || 'component',
-          name: options?.name || Component.name
+          name: options?.name || (Component as { name?: string }).name
         });
         idRef.current = id;
       }
@@ -46,10 +66,10 @@ export function withMemGuard<P extends object>(Component: ComponentType<P>, opti
     
     return createElement(Component, { ...props, ref: innerRef });
   };
-}
+};
 
 interface MemGuardProviderProps {
-  children: ReactNode;
+  children: React.ReactNode;
   enabled?: boolean;
   threshold?: number;
   interval?: number;
@@ -63,15 +83,28 @@ interface MemGuardContextType {
   trackComponents: boolean;
 }
 
-const MemGuardContext = createContext<MemGuardContextType | null>(null);
+type MemGuardContextTypeValue = MemGuardContextType | null;
+let MemGuardContext: React.Context<MemGuardContextTypeValue> | null = null;
 
-function TrackedComponent({ 
+const getMemGuardContext = () => {
+  if (!MemGuardContext && canUseReact) {
+    MemGuardContext = React!.createContext<MemGuardContextType | null>(null);
+  }
+  return MemGuardContext;
+};
+
+const TrackedComponent = ({ 
   element, 
   key 
 }: { 
-  element: ReactElement<any>; 
-  key: Key | null | undefined; 
-}) {
+  element: React.ReactElement<any>; 
+  key: React.Key | null | undefined; 
+}) => {
+  if (!canUseReact) {
+    return element;
+  }
+  
+  const { useEffect, useRef, createElement } = React!;
   const innerRef = useRef<any>(null);
   const idRef = useRef<string | null>(null);
   const type = element.type;
@@ -99,12 +132,18 @@ function TrackedComponent({
     ref: innerRef,
     key
   });
-}
+};
 
-function recursivelyTrackChildren(children: ReactNode): ReactNode {
+const recursivelyTrackChildren = (children: React.ReactNode): React.ReactNode => {
+  if (!canUseReact) {
+    return children;
+  }
+  
+  const { isValidElement, createElement } = React!;
+  
   if (Array.isArray(children)) {
     return children.map((child, index) => {
-      if (React.isValidElement(child)) {
+      if (isValidElement(child)) {
         return createElement(TrackedComponent, {
           element: child,
           key: child.key ?? `memguard-${index}`
@@ -114,7 +153,7 @@ function recursivelyTrackChildren(children: ReactNode): ReactNode {
     });
   }
   
-  if (React.isValidElement(children)) {
+  if (isValidElement(children)) {
     return createElement(TrackedComponent, {
       element: children,
       key: children.key
@@ -122,12 +161,18 @@ function recursivelyTrackChildren(children: ReactNode): ReactNode {
   }
   
   return children;
-}
+};
 
-const canUseDOM = typeof window !== 'undefined';
-const useIsomorphicLayoutEffect = canUseDOM ? useLayoutEffect : useEffect;
-
-export function MemGuardProvider({ children, trackComponents = false, ...config }: MemGuardProviderProps) {
+export const MemGuardProvider = ({ children, trackComponents = false, ...config }: MemGuardProviderProps) => {
+  if (!canUseReact) {
+    init(config);
+    return children as React.ReactNode;
+  }
+  
+  const { useLayoutEffect, useEffect, createElement } = React!;
+  const canUseDOM = typeof window !== 'undefined';
+  const useIsomorphicLayoutEffect = canUseDOM ? useLayoutEffect : useEffect;
+  
   useIsomorphicLayoutEffect(() => {
     init(config);
   }, []);
@@ -142,13 +187,30 @@ export function MemGuardProvider({ children, trackComponents = false, ...config 
     ? recursivelyTrackChildren(children)
     : children;
   
-  return createElement(MemGuardContext.Provider, { value: contextValue }, content);
-}
+  const context = getMemGuardContext();
+  if (!context) {
+    return content as React.ReactNode;
+  }
+  
+  return createElement(context.Provider, { value: contextValue }, content);
+};
 
-export function useMemGuardContext(): MemGuardContextType {
-  const context = useContext(MemGuardContext);
+export const useMemGuardContext = (): MemGuardContextType => {
+  if (!canUseReact) {
+    throw new Error('useMemGuardContext requires React to be available');
+  }
+  
+  const { useContext } = React!;
+  const context = getMemGuardContext();
+  
   if (!context) {
     throw new Error('useMemGuardContext must be used within a MemGuardProvider');
   }
-  return context;
-}
+  
+  const ctx = useContext(context);
+  if (!ctx) {
+    throw new Error('useMemGuardContext must be used within a MemGuardProvider');
+  }
+  
+  return ctx;
+};
