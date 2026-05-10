@@ -1,0 +1,8 @@
+demo.html
+.gitignore
+.trae/
+tests/
+*.test.ts
+rollup.config.js
+tsconfig.json
+tsconfig.build.json

@@ -1,0 +1,34 @@
+{
+  "name": "final-mem",
+  "version": "1.0.0",
+  "description": "基于 FinalizationRegistry 的内存泄漏检测工具",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json && rollup -c",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . --ext .ts"
+  },
+  "keywords": [
+    "memory",
+    "leak",
+    "detector",
+    "FinalizationRegistry",
+    "WeakRef"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^19.2.14",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "rollup": "^3.0.0",
+    "rollup-plugin-typescript2": "^0.37.0",
+    "typescript": "^5.0.0",
+    "vitest": "^0.34.0"
+  }
+}
