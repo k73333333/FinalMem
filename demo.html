@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FinalMem - 内存泄漏检测工具演示</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .header {
+      text-align: center;
+      color: white;
+      margin-bottom: 40px;
+    }
+    .header h1 {
+      font-size: 3rem;
+      margin-bottom: 10px;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+    .header p {
+      font-size: 1.1rem;
+      opacity: 0.9;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 30px;
+      margin-bottom: 20px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+    }
+    .card-title {
+      font-size: 1.3rem;
+      color: #333;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #eee;
+    }
+    .btn {
+      display: inline-block;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-right: 10px;
+      margin-bottom: 10px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+    .btn-danger {
+      background: #ff4757;
+      color: white;
+    }
+    .btn-danger:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(255, 71, 87, 0.4);
+    }
+    .btn-secondary {
+      background: #6c757d;
+      color: white;
+    }
+    .btn-secondary:hover {
+      background: #5a6268;
+    }
+    .btn-outline {
+      background: transparent;
+      border: 2px solid #667eea;
+      color: #667eea;
+    }
+    .btn-outline:hover {
+      background: #667eea;
+      color: white;
+    }
+    .status {
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9rem;
+    }
+    .status.info {
+      background: #d4edda;
+      color: #155724;
+    }
+    .status.warning {
+      background: #fff3cd;
+      color: #856404;
+    }
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    .code-block {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85rem;
+      color: #333;
+      margin: 15px 0;
+    }
+    .demo-area {
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 20px;
+      min-height: 100px;
+    }
+    .leak-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #28a745;
+      margin-right: 8px;
+      animation: pulse 2s infinite;
+    }
+    .leak-indicator.warning {
+      background: #ffc107;
+    }
+    .leak-indicator.danger {
+      background: #dc3545;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
+      margin-top: 20px;
+    }
+    .stat-item {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 2rem;
+      font-weight: bold;
+      color: #667eea;
+    }
+    .stat-label {
+      font-size: 0.85rem;
+      color: #666;
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>FinalMem</h1>
+      <p>基于 FinalizationRegistry 的内存泄漏检测工具</p>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">📊 实时状态</h2>
+      <div class="stats">
+        <div class="stat-item">
+          <div class="stat-value" id="trackedCount">0</div>
+          <div class="stat-label">追踪对象数</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="isInitialized">否</div>
+          <div class="stat-label">是否初始化</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">🎯 基础使用演示</h2>
+      <button class="btn btn-primary" onclick="createTrackedObject()">创建追踪对象</button>
+      <button class="btn btn-danger" onclick="destroyLastObject()">销毁最后一个对象</button>
+      <button class="btn btn-secondary" onclick="untrackLastObject()">取消追踪</button>
+      <div class="demo-area" id="objectsArea"></div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">⚠️ 内存泄漏模拟</h2>
+      <p>点击下方按钮模拟不同类型的内存泄漏场景。打开浏览器开发者工具（F12）查看泄漏警告：</p>
+      
+      <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 1rem; color: #555;">1. 全局变量引用泄漏</h3>
+      <p style="font-size: 0.9rem; color: #666; margin-bottom: 10px;">对象被全局变量引用，GC 无法回收</p>
+      <button class="btn btn-danger" onclick="createGlobalLeak()">创建全局引用泄漏</button>
+      <button class="btn btn-secondary" onclick="destroyGlobalLeak()">标记销毁</button>
+      
+      <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 1rem; color: #555;">2. 事件监听器泄漏</h3>
+      <p style="font-size: 0.9rem; color: #666; margin-bottom: 10px;">DOM 元素被移除但事件监听器未清理</p>
+      <button class="btn btn-danger" onclick="createListenerLeak()">创建监听器泄漏</button>
+      <button class="btn btn-secondary" onclick="cleanupListenerLeak()">清理监听器</button>
+      
+      <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 1rem; color: #555;">3. 定时器泄漏</h3>
+      <p style="font-size: 0.9rem; color: #666; margin-bottom: 10px;">setInterval 未清除，回调函数持有对象引用</p>
+      <button class="btn btn-danger" onclick="createTimerLeak()">创建定时器泄漏</button>
+      <button class="btn btn-secondary" onclick="clearTimerLeak()">清除定时器</button>
+      
+      <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 1rem; color: #555;">4. 闭包泄漏</h3>
+      <p style="font-size: 0.9rem; color: #666; margin-bottom: 10px;">内部函数持有外部变量引用</p>
+      <button class="btn btn-danger" onclick="createClosureLeak()">创建闭包泄漏</button>
+      <button class="btn btn-secondary" onclick="cleanupClosureLeak()">清理闭包</button>
+      
+      <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 1rem; color: #555;">5. 缓存泄漏</h3>
+      <p style="font-size: 0.9rem; color: #666; margin-bottom: 10px;">Map/Set 缓存未清理</p>
+      <button class="btn btn-danger" onclick="createCacheLeak()">创建缓存泄漏</button>
+      <button class="btn btn-secondary" onclick="clearCacheLeak()">清除缓存</button>
+      
+      <button class="btn btn-outline" style="margin-top: 20px;" onclick="clearAllLeaks()">清除所有泄漏</button>
+      
+      <div class="status info" id="leakStatus">
+        <span class="leak-indicator" id="leakIndicator"></span>
+        点击上方按钮模拟各种内存泄漏场景
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">🔧 配置演示</h2>
+      <label>
+        启用检测:
+        <input type="checkbox" id="enabledCheckbox" checked onchange="toggleEnabled()">
+      </label>
+      <br>
+      <label>
+        阈值 (ms):
+        <input type="number" id="thresholdInput" value="5000" min="1000" max="30000" onchange="updateThreshold()">
+      </label>
+      <br>
+      <label>
+        检测间隔 (ms):
+        <input type="number" id="intervalInput" value="2000" min="500" max="10000" onchange="updateInterval()">
+      </label>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">💡 使用示例</h2>
+      <p>在实际项目中使用 FinalMem：</p>
+      <div class="code-block">
+// 初始化配置
+FinalMem.init({
+  enabled: true,
+  threshold: 5000,  // 超过5秒未回收视为泄漏
+  interval: 2000    // 每2秒检测一次
+});
+
+// 追踪对象
+const obj = { data: 'test' };
+const id = FinalMem.track(obj, { type: 'object', name: 'myObject' });
+
+// 标记对象应该被销毁
+FinalMem.destroy(id);
+
+// 或者直接取消追踪
+FinalMem.untrack(id);
+
+// 清除所有追踪
+FinalMem.clearAll();
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">📝 控制台日志</h2>
+      <div class="status info" id="consoleLog">打开浏览器开发者工具 (F12) 查看详细日志输出</div>
+    </div>
+  </div>
+
+  <script src="dist/index.umd.js"></script>
+  <script>
+    let trackedObjects = [];
+    
+    let globalLeakObj = null;
+    let globalLeakId = null;
+    
+    let listenerLeakObj = null;
+    let listenerLeakId = null;
+    let listenerLeakElement = null;
+    let listenerHandler = null;
+    
+    let timerLeakObj = null;
+    let timerLeakId = null;
+    let timerId = null;
+    
+    let closureLeakObj = null;
+    let closureLeakId = null;
+    let closureCallback = null;
+    
+    let cacheLeakObj = null;
+    let cacheLeakId = null;
+    let leakyCache = null;
+
+    function updateStats() {
+      document.getElementById('trackedCount').textContent = FinalMem.getTrackedCount();
+      document.getElementById('isInitialized').textContent = FinalMem.isInitialized() ? '是' : '否';
+    }
+
+    function createTrackedObject() {
+      const obj = { 
+        id: Date.now(), 
+        name: `Object-${trackedObjects.length + 1}`,
+        data: 'Some data'
+      };
+      const trackId = FinalMem.track(obj, { type: 'demo', name: obj.name });
+      trackedObjects.push({ obj, trackId });
+      
+      const area = document.getElementById('objectsArea');
+      area.innerHTML += `<p>✅ 创建对象: ${obj.name} (ID: ${trackId})</p>`;
+      updateStats();
+    }
+
+    function destroyLastObject() {
+      if (trackedObjects.length === 0) {
+        alert('没有可销毁的对象');
+        return;
+      }
+      const last = trackedObjects[trackedObjects.length - 1];
+      FinalMem.destroy(last.trackId);
+      
+      const area = document.getElementById('objectsArea');
+      area.innerHTML += `<p>🔨 标记销毁: ${last.obj.name}</p>`;
+      updateStats();
+    }
+
+    function untrackLastObject() {
+      if (trackedObjects.length === 0) {
+        alert('没有可取消追踪的对象');
+        return;
+      }
+      const last = trackedObjects.pop();
+      FinalMem.untrack(last.trackId);
+      
+      const area = document.getElementById('objectsArea');
+      area.innerHTML += `<p>❌ 取消追踪: ${last.obj.name}</p>`;
+      updateStats();
+    }
+
+    function createGlobalLeak() {
+      globalLeakObj = { 
+        name: 'GlobalLeak',
+        type: 'global_reference',
+        data: 'This object is leaked because it is referenced by a global variable'
+      };
+      globalLeakId = FinalMem.track(globalLeakObj, { type: 'leak', name: 'GlobalLeak' });
+      updateLeakStatus('warning', '已创建全局变量引用泄漏！对象被全局变量持有，即使调用 destroy 也无法被 GC 回收。');
+    }
+
+    function destroyGlobalLeak() {
+      if (!globalLeakId) {
+        alert('请先创建全局引用泄漏');
+        return;
+      }
+      FinalMem.destroy(globalLeakId);
+      updateLeakStatus('danger', '已标记销毁！由于对象仍被全局变量引用，FinalMem 将在阈值时间后检测到泄漏并报警。');
+    }
+
+    function createListenerLeak() {
+      listenerLeakElement = document.createElement('div');
+      listenerLeakElement.id = 'leaky-element';
+      document.body.appendChild(listenerLeakElement);
+      
+      listenerLeakObj = { 
+        name: 'ListenerLeak',
+        type: 'event_listener',
+        element: listenerLeakElement
+      };
+      
+      listenerHandler = function() { console.log('leaky handler'); };
+      listenerLeakElement.addEventListener('click', listenerHandler);
+      
+      listenerLeakId = FinalMem.track(listenerLeakObj, { type: 'leak', name: 'ListenerLeak' });
+      
+      document.body.removeChild(listenerLeakElement);
+      updateLeakStatus('warning', '已创建事件监听器泄漏！DOM 元素已移除但监听器未清理。');
+    }
+
+    function cleanupListenerLeak() {
+      if (!listenerLeakElement || !listenerHandler) {
+        alert('请先创建监听器泄漏');
+        return;
+      }
+      listenerLeakElement.removeEventListener('click', listenerHandler);
+      FinalMem.destroy(listenerLeakId);
+      listenerLeakObj = null;
+      listenerLeakElement = null;
+      listenerHandler = null;
+      updateLeakStatus('info', '已清理事件监听器！对象现在可以被 GC 回收。');
+    }
+
+    function createTimerLeak() {
+      timerLeakObj = { 
+        name: 'TimerLeak',
+        type: 'timer',
+        data: 'This object is leaked because setInterval holds a reference to it'
+      };
+      
+      timerId = setInterval(function() {
+        console.log('Timer tick, holding reference to:', timerLeakObj.name);
+      }, 1000);
+      
+      timerLeakId = FinalMem.track(timerLeakObj, { type: 'leak', name: 'TimerLeak' });
+      updateLeakStatus('warning', '已创建定时器泄漏！setInterval 回调持有对象引用。');
+    }
+
+    function clearTimerLeak() {
+      if (!timerId) {
+        alert('请先创建定时器泄漏');
+        return;
+      }
+      clearInterval(timerId);
+      FinalMem.destroy(timerLeakId);
+      timerLeakObj = null;
+      timerId = null;
+      updateLeakStatus('info', '已清除定时器！对象现在可以被 GC 回收。');
+    }
+
+    function createClosureLeak() {
+      closureLeakObj = { 
+        name: 'ClosureLeak',
+        type: 'closure',
+        secretData: 'sensitive information'
+      };
+      
+      closureCallback = (function(obj) {
+        return function() {
+          console.log('Closure still holds:', obj.name);
+        };
+      })(closureLeakObj);
+      
+      window.addEventListener('resize', closureCallback);
+      
+      closureLeakId = FinalMem.track(closureLeakObj, { type: 'leak', name: 'ClosureLeak' });
+      updateLeakStatus('warning', '已创建闭包泄漏！resize 事件回调通过闭包持有对象引用。');
+    }
+
+    function cleanupClosureLeak() {
+      if (!closureCallback) {
+        alert('请先创建闭包泄漏');
+        return;
+      }
+      window.removeEventListener('resize', closureCallback);
+      FinalMem.destroy(closureLeakId);
+      closureLeakObj = null;
+      closureCallback = null;
+      updateLeakStatus('info', '已清理闭包引用！对象现在可以被 GC 回收。');
+    }
+
+    function createCacheLeak() {
+      if (!leakyCache) {
+        leakyCache = new Map();
+      }
+      
+      cacheLeakObj = { 
+        name: 'CacheLeak',
+        type: 'cache',
+        data: 'This object is leaked in a cache Map'
+      };
+      
+      leakyCache.set('key-' + Date.now(), cacheLeakObj);
+      cacheLeakId = FinalMem.track(cacheLeakObj, { type: 'leak', name: 'CacheLeak' });
+      updateLeakStatus('warning', '已创建缓存泄漏！对象被添加到 Map 缓存中，不会被自动清理。');
+    }
+
+    function clearCacheLeak() {
+      if (!leakyCache || !cacheLeakObj) {
+        alert('请先创建缓存泄漏');
+        return;
+      }
+      leakyCache.clear();
+      FinalMem.destroy(cacheLeakId);
+      cacheLeakObj = null;
+      updateLeakStatus('info', '已清除缓存！对象现在可以被 GC 回收。');
+    }
+
+    function clearAllLeaks() {
+      if (globalLeakId) FinalMem.untrack(globalLeakId);
+      if (listenerLeakId) FinalMem.untrack(listenerLeakId);
+      if (timerLeakId) FinalMem.untrack(timerLeakId);
+      if (closureLeakId) FinalMem.untrack(closureLeakId);
+      if (cacheLeakId) FinalMem.untrack(cacheLeakId);
+      
+      if (timerId) clearInterval(timerId);
+      if (closureCallback) window.removeEventListener('resize', closureCallback);
+      if (listenerLeakElement && listenerHandler) {
+        listenerLeakElement.removeEventListener('click', listenerHandler);
+      }
+      if (leakyCache) leakyCache.clear();
+      
+      globalLeakObj = null;
+      globalLeakId = null;
+      listenerLeakObj = null;
+      listenerLeakId = null;
+      listenerLeakElement = null;
+      listenerHandler = null;
+      timerLeakObj = null;
+      timerLeakId = null;
+      timerId = null;
+      closureLeakObj = null;
+      closureLeakId = null;
+      closureCallback = null;
+      cacheLeakObj = null;
+      cacheLeakId = null;
+      
+      updateLeakStatus('info', '已清除所有泄漏！');
+      updateStats();
+    }
+
+    function updateLeakStatus(type, message) {
+      const status = document.getElementById('leakStatus');
+      const indicator = document.getElementById('leakIndicator');
+      status.className = `status ${type}`;
+      indicator.className = `leak-indicator ${type === 'info' ? '' : type}`;
+      status.innerHTML = `<span class="leak-indicator ${type === 'info' ? '' : type}"></span>${message}`;
+      updateStats();
+    }
+
+    function toggleEnabled() {
+      const enabled = document.getElementById('enabledCheckbox').checked;
+      FinalMem.configure({ enabled });
+      console.log('检测状态:', enabled ? '启用' : '禁用');
+    }
+
+    function updateThreshold() {
+      const threshold = parseInt(document.getElementById('thresholdInput').value);
+      FinalMem.configure({ threshold });
+      console.log('阈值更新:', threshold + 'ms');
+    }
+
+    function updateInterval() {
+      const interval = parseInt(document.getElementById('intervalInput').value);
+      FinalMem.configure({ interval });
+      console.log('检测间隔更新:', interval + 'ms');
+    }
+
+    FinalMem.init({
+      enabled: true,
+      threshold: 5000,
+      interval: 2000
+    });
+
+    setInterval(updateStats, 1000);
+
+    console.log('🎉 FinalMem 演示页面已加载');
+    console.log('📖 打开开发者工具查看内存泄漏检测日志');
+  </script>
+</body>
+</html>
